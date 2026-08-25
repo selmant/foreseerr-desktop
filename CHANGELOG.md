@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Resume video and the web UI after switching workspace or monitor. Occlusion
+  left CEF on a stale frame and mpv blocked in a FIFO present wait.
+
 - Keep the request modal open when picking a quality profile, root folder, or
   other native `<select>` option. The in-page dropdown overlay was reaching the
   modal's click-outside handler (browser-native popups do not).

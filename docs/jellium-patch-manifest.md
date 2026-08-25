@@ -29,6 +29,9 @@ recorded here before `scripts/boundary-audit.sh` will pass.
 | `07f2c51` | `07f2c513ca71b5b41f9dcc88038f10fc918e6fb8` | hygiene | Format generic CEF cache initialization |
 | `b6984a8` | `b6984a80ac7f2d63c42a66e96a1a67a163448c63` | feature | Generic CEF HTTP-cache clearing host API |
 | `55f8036` | `55f803665f40a0540dc10555b991595ba0e89012` | test | Cover cache-limit composition with host extensions |
+| `23ed37c` | `23ed37cf6e162c982631a75faa28bafc10352da0` | feature | Load trusted setup documents in-process on the frontend layer |
+| `25fbb26` | `25fbb268c72ba20769befb2b763dd614346a9b42` | merge | Merge standalone-mode host-extension setup into main |
+| `3460258` | `3460258c3a367a315a411edc7d0b3ba08b2fb382` | runtime fix | Kick CEF/mpv presentation after workspace and monitor occlusion |
 
 ## Ownership rules
 

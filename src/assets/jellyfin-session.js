@@ -42,11 +42,65 @@
     } catch (_) {}
   }
 
+  function normalizeAddress(value) {
+    return String(value || "").replace(/\/$/, "");
+  }
+
+  function persistBootstrapServer(bootstrap) {
+    try {
+      const key = "jellyfin_credentials";
+      const raw = window.localStorage.getItem(key);
+      const creds = raw ? JSON.parse(raw) : {};
+      if (!creds || typeof creds !== "object") return;
+      if (!Array.isArray(creds.Servers)) creds.Servers = [];
+      const expected = normalizeAddress(bootstrap.serverUrl);
+      const matchesUrl = (server) =>
+        [server.ManualAddress, server.LocalAddress, server.RemoteAddress]
+          .filter(Boolean)
+          .some((address) => normalizeAddress(address) === expected);
+      let server = creds.Servers.find(matchesUrl);
+      if (!server) {
+        server = {
+          ManualAddress: expected,
+          manualAddressOnly: true,
+          LastConnectionMode: 2,
+        };
+        creds.Servers.unshift(server);
+      }
+      server.Id = bootstrap.serverId;
+      server.AccessToken = bootstrap.accessToken;
+      server.UserId = bootstrap.userId;
+      server.DateLastAccessed = Date.now();
+      window.localStorage.setItem(key, JSON.stringify(creds));
+    } catch (_) {}
+  }
+
+  function adoptBootstrapClient(client, bootstrap) {
+    persistBootstrapServer(bootstrap);
+    client.serverAddress(bootstrap.serverUrl);
+    if (typeof client.serverId === "function") {
+      client.serverId(bootstrap.serverId);
+    }
+    if (typeof client.deviceId === "function" && bootstrap.deviceId) {
+      client.deviceId(bootstrap.deviceId);
+    }
+    if (typeof client.setAuthenticationInfo === "function") {
+      client.setAuthenticationInfo(bootstrap.accessToken, bootstrap.userId);
+      return;
+    }
+    if (typeof client.userId === "function") {
+      client.userId(bootstrap.userId);
+    }
+    if (typeof client.accessToken === "function") {
+      client.accessToken(bootstrap.accessToken);
+    }
+  }
+
   function acknowledge(bootstrap, client) {
     const currentUserId =
       typeof client.getCurrentUserId === "function" ? client.getCurrentUserId() : client.userId();
-    const normalizedAddress = String(client.serverAddress()).replace(/\/$/, "");
-    const expectedAddress = bootstrap.serverUrl.replace(/\/$/, "");
+    const normalizedAddress = normalizeAddress(client.serverAddress());
+    const expectedAddress = normalizeAddress(bootstrap.serverUrl);
     const matches =
       normalizedAddress === expectedAddress &&
       client.serverId() === bootstrap.serverId &&
@@ -98,12 +152,13 @@
       ) {
         const hasExpectedIdentity =
           client.getCurrentUserId() === bootstrap.userId &&
-          client.accessToken() === bootstrap.accessToken;
+          client.accessToken() === bootstrap.accessToken &&
+          client.serverId() === bootstrap.serverId;
         if (!hasExpectedIdentity) {
-          if (!location.hash.toLowerCase().includes("/login")) return;
-          client.serverAddress(bootstrap.serverUrl);
-          if (client.serverId() !== bootstrap.serverId) return;
-          client.setAuthenticationInfo(bootstrap.accessToken, bootstrap.userId);
+          // Private webview: Foreseer redeem already proved this origin+token.
+          // After a Jellyfin reinstall, cached credentials keep the old server
+          // Id and ConnectionManager sits in ServerMismatch (not /login).
+          adoptBootstrapClient(client, bootstrap);
         }
         if (validationGeneration === bootstrap.generation) return;
         validationGeneration = bootstrap.generation;
@@ -122,11 +177,7 @@
         return;
       }
       if (typeof client.userId !== "function") return;
-      client.serverAddress(bootstrap.serverUrl);
-      client.serverId(bootstrap.serverId);
-      client.userId(bootstrap.userId);
-      client.deviceId(bootstrap.deviceId);
-      client.accessToken(bootstrap.accessToken);
+      adoptBootstrapClient(client, bootstrap);
       acknowledge(bootstrap, client);
     } catch (_) {}
   }

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Keep the request modal open when picking a quality profile, root folder, or
+  other native `<select>` option. The in-page dropdown overlay was reaching the
+  modal's click-outside handler (browser-native popups do not).
+
+- Adopt a new Jellyfin server Id after the media server is reinstalled, instead
+  of stalling on ConnectionManager `ServerMismatch` because cached credentials
+  and the `/login` hash gate blocked session bootstrap.
+
 ## 0.2.9 — 2026-08-14
 
 ### Fixed

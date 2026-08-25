@@ -1,4 +1,7 @@
 /target
+/logs
+/resources
+*.AppImage
 **/*.rs.bk
 .idea/
 .vscode/

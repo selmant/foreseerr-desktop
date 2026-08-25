@@ -1121,6 +1121,7 @@ dependencies = [
  "directories",
  "getrandom 0.3.4",
  "jfn-rust",
+ "libc",
  "serde",
  "serde_json",
  "sha2",
@@ -1129,6 +1130,7 @@ dependencies = [
  "tracing-subscriber",
  "ureq",
  "url",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

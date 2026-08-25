@@ -120,6 +120,15 @@ impl<R: RuntimeOps> Controller<R> {
         self.in_setup
     }
 
+    pub fn enter_setup(&mut self) {
+        self.in_setup = true;
+        self.state = AppState::Setup;
+        self.setup_generation = self.setup_generation.wrapping_add(1);
+        self.active_request_id = None;
+        self.expected_session = None;
+        self.pending_bootstrap = None;
+    }
+
     pub fn active_request_id(&self) -> Option<&str> {
         self.active_request_id.as_deref()
     }
@@ -146,6 +155,17 @@ impl<R: RuntimeOps> Controller<R> {
                 url,
                 allow_http,
             } => self.on_setup_save(id, url, allow_http),
+            NativeCommandV1::SetupStandalone { id } => {
+                self.emit_error(&id, AuthErrorCode::InvalidRequest);
+                true
+            }
+            // The extension redeems the server-authorized ticket before it
+            // reaches this generic controller.
+            NativeCommandV1::BrowserCacheClear { .. } => true,
+            // The extension owns retry state and exact-port rebinding.
+            NativeCommandV1::RuntimeRetry { .. } => true,
+            NativeCommandV1::RuntimeOpenLogs { .. } => true,
+            NativeCommandV1::RuntimeOpenSetup { .. } => true,
             NativeCommandV1::WindowMinimize { .. } => {
                 self.runtime.minimize();
                 true
@@ -223,6 +243,19 @@ impl<R: RuntimeOps> Controller<R> {
                 }
             }
             ControllerEvent::BootstrapFailed { request_id, code } => {
+                if let Some((pending_id, bootstrap)) = self.pending_bootstrap.as_mut()
+                    && pending_id == &request_id
+                    && let Some(fallback) = bootstrap.fallback_server_url.take()
+                    && fallback != bootstrap.server_url
+                {
+                    bootstrap.server_url = fallback;
+                    if let Ok(expected) = bootstrap.expected() {
+                        self.expected_session = Some(expected);
+                        let url = bootstrap.server_url.clone();
+                        let _ = self.runtime.navigate_primary_web(&url);
+                        return;
+                    }
+                }
                 self.pending_bootstrap = None;
                 self.state = AppState::Degraded;
                 self.emit_error(&request_id, code);
@@ -341,7 +374,7 @@ impl<R: RuntimeOps> Controller<R> {
             self.emit_error(&id, AuthErrorCode::InvalidRequest);
             return true;
         }
-        if let Err(err) = validate_foreseer_url(&url, allow_http) {
+        if let Err(err) = validate_foreseer_url(&url) {
             self.runtime.post_frontend_event(
                 NativeEventV1::new(id, "error")
                     .with_error("invalid_request")
@@ -354,12 +387,12 @@ impl<R: RuntimeOps> Controller<R> {
         true
     }
 
-    fn on_setup_save(&mut self, id: String, url: String, allow_http: bool) -> bool {
+    fn on_setup_save(&mut self, id: String, url: String, _allow_http: bool) -> bool {
         if !self.in_setup {
             self.emit_error(&id, AuthErrorCode::InvalidRequest);
             return true;
         }
-        match validate_foreseer_url(&url, allow_http) {
+        match validate_foreseer_url(&url) {
             Ok(normalized) => {
                 self.setup_generation = self.setup_generation.wrapping_add(1);
                 self.in_setup = false;
@@ -443,6 +476,7 @@ mod tests {
             device_id: "dev".into(),
             access_token: "tok".into(),
             bootstrap_generation: "gen-1".into(),
+            fallback_server_url: None,
         }
     }
 
@@ -477,6 +511,27 @@ mod tests {
         });
         assert_eq!(ctl.state(), AppState::Ready);
         assert!(ctl.runtime.events.iter().any(|e| e.event_type == "ready"));
+    }
+
+    #[test]
+    fn jellyfin_fallback_url_is_tried_after_bootstrap_failure() {
+        let mut ctl = Controller::new(MockRuntime::default(), false);
+        let epoch = ctl.auth_epoch();
+        let mut bootstrap = bootstrap();
+        bootstrap.server_url = "http://192.168.40.3:8096".into();
+        bootstrap.fallback_server_url = Some("https://jellyfin.example".into());
+        ctl.handle_event(ControllerEvent::AuthRedeemed {
+            request_id: "a1".into(),
+            bootstrap,
+            auth_epoch: epoch,
+        });
+        assert_eq!(ctl.runtime.navigations[0], "http://192.168.40.3:8096");
+        ctl.handle_event(ControllerEvent::BootstrapFailed {
+            request_id: "a1".into(),
+            code: AuthErrorCode::InvalidBootstrapResponse,
+        });
+        assert_eq!(ctl.runtime.navigations[1], "https://jellyfin.example");
+        assert_eq!(ctl.state(), AppState::Authenticating);
     }
 
     #[test]
@@ -544,6 +599,22 @@ mod tests {
                 .iter()
                 .all(|e| e.event_type != "connectivity-success")
         );
+    }
+
+    #[test]
+    fn enter_setup_reopens_setup_authority() {
+        let mut ctl = Controller::new(MockRuntime::default(), false);
+        assert!(!ctl.in_setup());
+        ctl.enter_setup();
+        assert!(ctl.in_setup());
+        assert_eq!(ctl.state(), AppState::Setup);
+        ctl.handle_command(NativeCommandV1::SetupSave {
+            id: "s1".into(),
+            url: "https://foreseer.example".into(),
+            allow_http: false,
+        });
+        assert!(!ctl.in_setup());
+        assert_eq!(ctl.runtime.setup_navs[0], "https://foreseer.example");
     }
 
     #[test]

@@ -13,6 +13,7 @@ pub struct SessionBootstrap {
     pub device_id: String,
     pub access_token: String,
     pub bootstrap_generation: String,
+    pub fallback_server_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +36,14 @@ impl SessionBootstrap {
     pub fn validate_shape(&self) -> Result<(), &'static str> {
         validate_bootstrap_server_url(&self.server_url)
             .map_err(|_| "invalid_bootstrap_response")?;
+        if let Some(fallback) = &self.fallback_server_url {
+            validate_bootstrap_server_url(fallback)
+                .map_err(|_| "invalid_bootstrap_response")?;
+        }
+        self.validate_ids()
+    }
+
+    fn validate_ids(&self) -> Result<(), &'static str> {
         for (value, name) in [
             (&self.server_id, "server_id"),
             (&self.user_id, "user_id"),
@@ -53,7 +62,7 @@ impl SessionBootstrap {
     }
 
     pub fn expected(&self) -> Result<ExpectedSession, &'static str> {
-        self.validate_shape()?;
+        self.validate_ids()?;
         let origin = url::Url::parse(&self.server_url)
             .map(|u| u.origin().ascii_serialization())
             .map_err(|_| "invalid_bootstrap_response")?;
@@ -107,6 +116,7 @@ mod tests {
             device_id: "dev".into(),
             access_token: "tok".into(),
             bootstrap_generation: "gen-1".into(),
+            fallback_server_url: None,
         }
     }
 
@@ -129,10 +139,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_http_bootstrap_and_redacts() {
-        let mut bad = sample();
-        bad.server_url = "http://jellyfin.example/".into();
-        assert!(bad.validate_shape().is_err());
+    fn accepts_http_bootstrap_from_url_scheme() {
+        let mut http = sample();
+        http.server_url = "http://jellyfin.example/".into();
+        assert!(http.validate_shape().is_ok());
         assert_eq!(redact_secrets(r#"{"accessToken":"secret"}"#), "[redacted]");
+    }
+
+    #[test]
+    fn accepts_private_http_bootstrap() {
+        let mut lan = sample();
+        lan.server_url = "http://192.168.40.3:8096".into();
+        assert!(lan.validate_shape().is_ok());
     }
 }

@@ -128,6 +128,20 @@ struct RedemptionBootstrapResponse {
     device_id: Option<String>,
     access_token: Option<String>,
     bootstrap_generation: Option<String>,
+    fallback_server_url: Option<String>,
+}
+
+fn optional_bootstrap_url(value: Option<String>) -> Result<Option<String>, AuthErrorCode> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.len() > crate::config::MAX_FORESEER_URL_LEN {
+        return Err(AuthErrorCode::InvalidBootstrapResponse);
+    }
+    Ok(Some(value))
 }
 
 fn required_bootstrap_field(value: Option<String>, max: usize) -> Result<String, AuthErrorCode> {
@@ -154,6 +168,7 @@ pub fn parse_redemption_bootstrap(body: &str) -> Result<SessionBootstrap, AuthEr
             parsed.bootstrap_generation,
             BOOTSTRAP_ID_MAX_LEN,
         )?,
+        fallback_server_url: optional_bootstrap_url(parsed.fallback_server_url)?,
     };
     bootstrap
         .validate_shape()

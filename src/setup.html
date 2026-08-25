@@ -3,155 +3,169 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Foreseer Desktop - Server Setup</title>
+  <title>Foreseer — Connect to a server</title>
   <style>
     :root {
-      --bg: #0b0f19;
-      --card-bg: rgba(21, 28, 44, 0.75);
-      --card-border: rgba(255, 255, 255, 0.1);
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
+      --bg: #111827;
+      --bg-glow: #312e81;
+      --card: rgba(31, 41, 55, 0.72);
+      --border: #4b5563;
       --text: #f3f4f6;
-      --text-muted: #9ca3af;
-      --error: #ef4444;
-      --success: #10b981;
+      --muted: #9ca3af;
+      --indigo: #4f46e5;
+      --indigo-hover: #4338ca;
+      --indigo-border: #6366f1;
+      --error: #fca5a5;
+      --error-bg: rgba(220, 38, 38, 0.28);
+      --success: #6ee7b7;
+      --success-bg: rgba(16, 185, 129, 0.18);
+      --info: #93c5fd;
+      --info-bg: rgba(79, 70, 229, 0.18);
+      --radius: 8px;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
     }
 
     body {
-      background-color: var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(79, 70, 229, 0.28), transparent 60%),
+        radial-gradient(800px 400px at 80% 110%, rgba(168, 85, 247, 0.12), transparent 55%),
+        var(--bg);
       color: var(--text);
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
+      justify-content: center;
       min-height: 100vh;
-      padding: 20px;
+      padding: 32px 16px 40px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    .brand svg {
+      width: 72px;
+      height: 72px;
+      margin-bottom: 14px;
+    }
+
+    .brand h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .brand p {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.45;
+      max-width: 28rem;
     }
 
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      backdrop-filter: blur(12px);
-      padding: 32px;
       width: 100%;
-      max-width: 440px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      max-width: 28rem;
+      background: var(--card);
+      border: 1px solid rgba(75, 85, 99, 0.7);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(8px);
+      padding: 2rem 2.25rem 1.75rem;
     }
 
-    .logo {
-      text-align: center;
-      margin-bottom: 24px;
+    .status-box {
+      margin-bottom: 1.25rem;
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius);
+      font-size: 13px;
+      line-height: 1.45;
+      display: none;
     }
 
-    .logo h1 {
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #60a5fa 0%, #a855f7 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+    .status-box.error {
+      display: block;
+      background: var(--error-bg);
+      color: var(--error);
     }
 
-    .logo p {
-      color: var(--text-muted);
-      font-size: 14px;
-      margin-top: 4px;
+    .status-box.success {
+      display: block;
+      background: var(--success-bg);
+      color: var(--success);
     }
 
-    .form-group {
-      margin-bottom: 20px;
+    .status-box.loading {
+      display: block;
+      background: var(--info-bg);
+      color: var(--info);
     }
 
-    label {
+    label.field-label {
       display: block;
       font-size: 13px;
       font-weight: 600;
-      color: var(--text-muted);
+      color: #d1d5db;
       margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
 
-    input[type="text"], input[type="url"] {
+    input[type="url"] {
       width: 100%;
-      padding: 12px 16px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
+      padding: 11px 14px;
+      background: rgba(17, 24, 39, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 6px;
       color: var(--text);
       font-size: 15px;
       outline: none;
-      transition: all 0.2s ease;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
 
-    input[type="text"]:focus, input[type="url"]:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-      background: rgba(255, 255, 255, 0.08);
+    input[type="url"]::placeholder {
+      color: #6b7280;
     }
 
-    .checkbox-group {
+    input[type="url"]:focus {
+      border-color: var(--indigo-border);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+    }
+
+    .hint {
+      margin-top: 8px;
+      margin-bottom: 1.35rem;
+      color: #6b7280;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .actions {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 10px;
-      margin-bottom: 24px;
-      user-select: none;
-    }
-
-    .checkbox-group input {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--primary);
-      cursor: pointer;
-    }
-
-    .checkbox-group label {
-      margin-bottom: 0;
-      text-transform: none;
-      font-size: 14px;
-      color: var(--text);
-      cursor: pointer;
-    }
-
-    .btn-group {
-      display: flex;
-      gap: 12px;
     }
 
     button {
-      flex: 1;
-      padding: 12px;
-      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 6px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
-      border: none;
-      transition: all 0.2s ease;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-hover);
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.1);
-      color: var(--text);
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.15);
+      transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
     }
 
     button:disabled {
@@ -159,63 +173,120 @@
       cursor: not-allowed;
     }
 
-    .status-box {
-      margin-bottom: 20px;
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      display: none;
+    .btn-primary {
+      color: #fff;
+      background: rgba(79, 70, 229, 0.88);
+      border: 1px solid var(--indigo-border);
     }
 
-    .status-box.error {
-      display: block;
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #fca5a5;
+    .btn-primary:hover:not(:disabled) {
+      background: var(--indigo-hover);
     }
 
-    .status-box.success {
-      display: block;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #6ee7b7;
+    .btn-ghost {
+      color: #fff;
+      background: transparent;
+      border: 1px solid #4b5563;
     }
 
-    .status-box.loading {
-      display: block;
-      background: rgba(59, 130, 246, 0.15);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      color: #93c5fd;
+    .btn-ghost:hover:not(:disabled) {
+      border-color: #e5e7eb;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 1.35rem 0 1rem;
+      color: #9ca3af;
+      font-size: 12px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      border-top: 1px solid #4b5563;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .footer button {
+      width: auto;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .footer button:hover {
+      color: #d1d5db;
     }
   </style>
 </head>
 <body>
+  <header class="brand">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" aria-hidden="true">
+      <path fill="url(#mark)" fill-rule="evenodd" d="M48 96C74.51 96 96 74.51 96 48S74.51 0 48 0 0 21.49 0 48s21.49 48 48 48Zm32.00-44c0 15.46-12.54 28-28 28S24 67.46 24 52c0-2.87.43-5.64 1.23-8.25C27.43 48.62 32.32 52 38 52c7.73 0 14-6.27 14-14 0-5.68-3.38-10.57-8.25-12.77 2.61-.8 5.38-1.23 8.25-1.23 15.46 0 28 12.54 28 28Z" clip-rule="evenodd"/>
+      <path fill="#131928" fill-rule="evenodd" d="M80 52c0 15.46-12.54 28-28 28C36.86 80 24.53 67.99 24.02 52.98 24.01 53.32 24 53.66 24 54c0 16.57 13.43 30 30 30s30-13.43 30-30S70.57 24 54 24c-.34 0-.68.01-1.02.02C67.99 24.53 80 36.87 80 52Z" clip-rule="evenodd" opacity=".2"/>
+      <path fill="url(#glint)" fill-rule="evenodd" d="M48 12C28.12 12 12 28.12 12 48c0 2.21-1.79 4-4 4s-4-1.79-4-4C4 23.7 23.7 4 48 4c2.21 0 4 1.79 4 4s-1.79 4-4 4Z" clip-rule="evenodd"/>
+      <defs>
+        <linearGradient id="mark" x1="48" x2="117.5" y1="0" y2="69.5" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#C395FC"/>
+          <stop offset="1" stop-color="#4F65F5"/>
+        </linearGradient>
+        <linearGradient id="glint" x1="28" x2="28" y1="8" y2="48" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#fff" stop-opacity=".4"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <h1>Foreseer</h1>
+    <p>Connect this app to an existing Foreseerr, or keep using the local server on this computer.</p>
+  </header>
 
-  <div class="card">
-    <div class="logo">
-      <h1>FORESEER</h1>
-      <p>Configure Server Connection</p>
-    </div>
+  <main class="card">
+    {{RECOVERY_MESSAGE}}
 
-    <div class="form-group">
-      <label for="serverUrl">Server Address</label>
-      <input type="url" id="serverUrl" placeholder="https://foreseer.example.com" value="https://foreseer.example.com" spellcheck="false" required>
-    </div>
+    <form id="setupForm" action="#" novalidate>
+      <label class="field-label" for="serverUrl">Server address</label>
+      <input
+        type="url"
+        id="serverUrl"
+        name="serverUrl"
+        placeholder="https://foreseerr.example.com"
+        spellcheck="false"
+        autocomplete="url"
+        inputmode="url"
+        required
+        autofocus
+      >
+      <p class="hint">Use https:// or http://. Add a port if it is not 443 or 80.</p>
 
-    <div class="checkbox-group">
-      <label for="allowHttp">
-        <input type="checkbox" id="allowHttp">
-        Allow HTTP (for local non-SSL setups)
-      </label>
-    </div>
+      <div id="statusBox" class="status-box" role="status"></div>
 
-    <div id="statusBox" class="status-box"></div>
+      <div class="actions">
+        <button type="submit" class="btn-primary" id="saveBtn">Connect</button>
+        <button type="button" class="btn-ghost" id="testBtn">Test connection</button>
+      </div>
+    </form>
 
-    <div class="btn-group">
-      <button type="button" class="btn-secondary" id="testBtn" onclick="testConnection()">Test</button>
-      <button type="button" class="btn-primary" id="saveBtn" onclick="saveAndConnect()">Connect & Save</button>
-    </div>
-  </div>
+    <div class="divider">or</div>
+
+    <button type="button" class="btn-ghost" id="standaloneBtn">{{STANDALONE_ACTION_LABEL}}</button>
+  </main>
+
+  <nav class="footer">
+    <button type="button" id="logsBtn">Open logs</button>
+    <button type="button" id="quitBtn">Quit</button>
+  </nav>
 
   <script>
     {{SETUP_EVENT_JS}}
@@ -248,7 +319,7 @@
           }
           const ok = host.send({
             id: reqId,
-            type: action === 'test' ? 'setup.check' : 'setup.save',
+            type: action === 'test' ? 'setup.check' : action === 'standalone' ? 'setup.standalone' : action === 'logs' ? 'runtime.open-logs' : action === 'quit' ? 'app.quit' : 'setup.save',
             url,
             allowHttp: !!allowHttp,
           });
@@ -262,60 +333,81 @@
       });
     }
 
-    async function testConnection() {
-      const url = document.getElementById('serverUrl').value.trim();
-      const allowHttp = document.getElementById('allowHttp').checked;
+    function showStatus(message, kind) {
       const statusBox = document.getElementById('statusBox');
-      const testBtn = document.getElementById('testBtn');
+      statusBox.className = 'status-box ' + kind;
+      statusBox.textContent = message;
+    }
 
+    function formValues() {
+      const url = document.getElementById('serverUrl').value.trim();
+      return {
+        url,
+        allowHttp: /^http:/i.test(url),
+      };
+    }
+
+    document.getElementById('standaloneBtn').addEventListener('click', async () => {
+      try {
+        await nativeCall('standalone', '', false);
+        showStatus('Standalone mode will start after restart.', 'success');
+      } catch (err) {
+        showStatus(err.message, 'error');
+      }
+    });
+
+    document.getElementById('logsBtn').addEventListener('click', async () => {
+      try {
+        await nativeCall('logs', '', false);
+        showStatus('Opened standalone logs.', 'success');
+      } catch (err) {
+        showStatus(err.message, 'error');
+      }
+    });
+
+    document.getElementById('quitBtn').addEventListener('click', () => {
+      nativeCall('quit', '', false).catch(() => {
+        showStatus('Could not quit Foreseer.', 'error');
+      });
+    });
+
+    document.getElementById('testBtn').addEventListener('click', async () => {
+      const { url, allowHttp } = formValues();
+      const testBtn = document.getElementById('testBtn');
       if (!url) {
-        statusBox.className = 'status-box error';
-        statusBox.textContent = 'Please enter a server URL.';
+        showStatus('Enter a server address first.', 'error');
         return;
       }
-
-      statusBox.className = 'status-box loading';
-      statusBox.textContent = 'Testing connection...';
+      showStatus('Testing connection…', 'loading');
       testBtn.disabled = true;
-
       try {
         const result = await nativeCall('test', url, allowHttp);
-        statusBox.className = 'status-box success';
-        statusBox.textContent = '✓ Reachable (HTTP ' + result.status + ')';
+        showStatus('Reachable (HTTP ' + result.status + ')', 'success');
       } catch (err) {
-        statusBox.className = 'status-box error';
-        statusBox.textContent = '✕ ' + err.message;
+        showStatus(err.message, 'error');
       } finally {
         testBtn.disabled = false;
       }
-    }
+    });
 
-    async function saveAndConnect() {
-      const url = document.getElementById('serverUrl').value.trim();
-      const allowHttp = document.getElementById('allowHttp').checked;
-      const statusBox = document.getElementById('statusBox');
+    document.getElementById('setupForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const { url, allowHttp } = formValues();
       const saveBtn = document.getElementById('saveBtn');
-
       if (!url) {
-        statusBox.className = 'status-box error';
-        statusBox.textContent = 'Please enter a server URL.';
+        showStatus('Enter a server address first.', 'error');
         return;
       }
-
-      statusBox.className = 'status-box loading';
-      statusBox.textContent = 'Saving configuration...';
+      showStatus('Saving configuration…', 'loading');
       saveBtn.disabled = true;
-
       try {
         await nativeCall('save', url, allowHttp);
-        statusBox.className = 'status-box success';
-        statusBox.textContent = '✓ Saved! Launching Foreseer...';
+        showStatus('Saved. Opening Foreseer…', 'success');
       } catch (err) {
-        statusBox.className = 'status-box error';
-        statusBox.textContent = '✕ ' + err.message;
+        showStatus(err.message, 'error');
         saveBtn.disabled = false;
       }
-    }
+    });
   </script>
 </body>
 </html>

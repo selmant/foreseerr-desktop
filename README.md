@@ -12,10 +12,9 @@ See [LICENSE](LICENSE).
 
 ## How this fits the Foreseer product
 
-Foreseer Desktop is an optional client for the hosted
-[Foreseerr](https://github.com/selmant/foreseerr) application. It does not
-replace or bundle the web app, run a separate request server, or own the user's
-media-account configuration.
+Foreseer Desktop defaults to standalone mode: it starts a bundled Foreseerr
+server on an ephemeral `127.0.0.1` port and owns its local data. Remote mode
+remains available for an existing Foreseerr deployment.
 
 | Component | Owns |
 | --- | --- |
@@ -63,15 +62,17 @@ Foreseer Desktop persists its configuration in a standard OS config directory:
 
 ```json
 {
-  "server_url": "https://foreseer.example.com",
-  "allow_insecure_http": false
+  "schema_version": 2,
+  "mode": "standalone",
+  "remote": { "server_url": "https://foreseer.example.com", "allow_insecure_http": false },
+  "standalone": { "cache_limit_bytes": 2147483648 }
 }
 ```
 
 ### CLI Commands & Environment Variables
 
 ```sh
-# Run with default or saved server URL:
+# Run the saved standalone or remote mode:
 cargo run
 
 # Launch the graphical server setup GUI:
@@ -80,15 +81,44 @@ cargo run -- --setup
 # View current configuration and file location:
 cargo run -- --show-config
 
-# Set a new default server URL:
-cargo run -- --set-url https://foreseer.example.com
+# Switch modes:
+cargo run -- --standalone
+cargo run -- --remote https://foreseer.example.com
 
-# Allow HTTP (non-HTTPS) server URL:
-cargo run -- --set-url http://192.168.1.50:5055 --allow-http
+# Set the combined transient cache budget (images + CEF HTTP cache):
+cargo run -- --cache-limit 2147483648
+
+# HTTP or HTTPS — the URL scheme is the choice:
+cargo run -- --set-url http://192.168.1.50:5055
 
 # Temporary environment variable override (does not modify config.json):
 FORESEER_URL=https://foreseer.example cargo run
 ```
+
+### Standalone data and recovery
+
+Standalone Foreseerr data is separate from the Jellium profile:
+
+```text
+<Foreseer config>/standalone/
+  settings.json
+  db/db.sqlite3
+  logs/
+  state/
+  backups/
+```
+
+Before starting a bundled Foreseerr version different from the last verified
+standalone version, the desktop creates a timestamped backup of `settings.json`
+and the SQLite database (including WAL/SHM files). Caches and logs are never
+included in those backups, and only the three newest automatic backups are
+kept.
+
+If migration or startup fails, use the recovery screen’s **Open Logs** action,
+then stop the desktop before attempting manual recovery. Do not copy an older
+database over a database while a newer bundled binary is running: automatic
+restore is intentionally not implemented because schema downgrades are unsafe.
+Keep the failed database, logs, and backup together until recovery is complete.
 
 ## Test / lint
 

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+FORESEERR_DIR="${FORESEERR_DIR:-$ROOT/../SeerrSuggestArr}"
+test -s "$ROOT/jellium.rev"
+test -s "$ROOT/foreseerr.rev"
+test -s "$ROOT/foreseerr.version"
+test -s "$ROOT/node.rev"
+test -f "$FORESEERR_DIR/package.json"
+PIN="$(tr -d '[:space:]' < "$ROOT/foreseerr.version")"
+VERSION="$(node -p "require('$FORESEERR_DIR/package.json').version")"
+test "$PIN" = "$VERSION"
+REVISION="$(tr -d '[:space:]' < "$ROOT/foreseerr.rev")"
+test "$(git -C "$FORESEERR_DIR" rev-parse HEAD)" = "$REVISION"
+test -f "$FORESEERR_DIR/launcher.js"
+NODE_PIN="$(tr -d '[:space:]' < "$ROOT/node.rev")"
+test "$(node --version)" = "$NODE_PIN"
+echo "release pins: Foreseer Desktop $(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/Cargo.toml" | head -1), Foreseerr $PIN, Node $NODE_PIN"

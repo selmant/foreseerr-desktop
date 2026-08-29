@@ -4,8 +4,9 @@ Native Foreseer shell backed by Jellium's opt-in `host-extension` runtime.
 Foreseer Desktop owns protocol v1, product policy, and injected assets; Jellium
 supplies CEF/mpv and a generic extension seam.
 
-**0.2 support:** Linux (Wayland primary, X11 best-effort), **from source**.
-Windows/macOS and packaged installers are not released yet.
+**0.3 support:** Linux (Wayland primary, X11 best-effort), from source or
+CI AppImage. An unsigned Windows x64 portable ZIP is also produced. macOS is
+not released.
 
 This binary links GPL-2.0-only Jellium code and is therefore GPL-2.0-only.
 See [LICENSE](LICENSE).
@@ -145,7 +146,7 @@ leaks, focus loss, and Jellyfin UI flashes.
 
 | Pin | Location |
 | --- | --- |
-| Version | `Cargo.toml` (`0.2.10`) |
+| Version | `Cargo.toml` (`0.3.0`) |
 | Jellium revision | `jellium.rev` |
 
 CI checks out that Jellium revision as a sibling of this repo and runs format,

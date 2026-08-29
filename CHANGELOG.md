@@ -2,18 +2,30 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-08-29
+
+### Added
+
+- Standalone mode: supervise a bundled Foreseerr on an ephemeral localhost
+  port, with local SQLite data, upgrade backups, and a recovery screen
+  (retry, open logs, quit, switch to remote).
+- Native setup can choose standalone or remote, including in-process remote
+  setup and Jellyfin HTTPS fallback.
+- Cache budget preference, authorized browser-cache clearing, and desktop
+  mode preference capability advertised to the hosted UI.
+
 ### Fixed
 
 - Resume video and the web UI after switching workspace or monitor. Occlusion
   left CEF on a stale frame and mpv blocked in a FIFO present wait.
-
 - Keep the request modal open when picking a quality profile, root folder, or
   other native `<select>` option. The in-page dropdown overlay was reaching the
   modal's click-outside handler (browser-native popups do not).
-
 - Adopt a new Jellyfin server Id after the media server is reinstalled, instead
   of stalling on ConnectionManager `ServerMismatch` because cached credentials
   and the `/login` hash gate blocked session bootstrap.
+- Keep the standalone child alive across CEF readiness, playback-aware job
+  drain, Windows job-object containment, and Node staging on Windows.
 
 ## 0.2.9 — 2026-08-14
 

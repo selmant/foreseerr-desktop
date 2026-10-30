@@ -302,8 +302,8 @@ impl HostExtension for ForeseerExtension {
             RuntimeEvent::ShutdownBeginning => {
                 self.runtime_shutting_down.store(true, Ordering::Release);
                 // Shut down on this thread. A detached helper can be killed
-                // when the process exits, leaving a spinning Node child that
-                // still holds instance.lock and the SQLite WAL.
+                // when the process exits, before the Foreseerr child has
+                // released instance.lock and checkpointed the SQLite WAL.
                 if let Some(supervisor) = &self.standalone_supervisor
                     && let Ok(mut supervisor) = supervisor.lock()
                 {

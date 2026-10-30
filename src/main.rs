@@ -13,7 +13,7 @@ const SETUP_RELAUNCH_ENV: &str = "FORESEER_SETUP_RELAUNCHED";
 
 fn main() {
     // CEF helper processes share this binary. They must never create data,
-    // backups, or a managed Node child.
+    // backups, or a managed Foreseerr child.
     if std::env::args().any(|arg| arg.starts_with("--type=")) {
         std::process::exit(jfn_rust::app::jfn_app_main_with(HostOptions::default()));
     }
@@ -69,9 +69,8 @@ fn main() {
         standalone = Some(Arc::new(Mutex::new(child)));
         (descriptor, url, true)
     } else {
-        let url =
-            validate_foreseer_url(&config.remote.server_url)
-                .expect("validated configured Foreseer URL");
+        let url = validate_foreseer_url(&config.remote.server_url)
+            .expect("validated configured Foreseer URL");
         let descriptor = HostExtensionDescriptor::from_url(
             &url,
             vec![frontend_script],

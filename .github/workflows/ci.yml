@@ -92,6 +92,12 @@ jobs:
       - name: Protocol v1 harness
         run: node scripts/protocol-v1-harness.mjs
 
+      - name: Runtime staging scripts
+        run: |
+          shellcheck scripts/stage-foreseerr.sh scripts/check-release-pins.sh
+          node --check scripts/generate-third-party-notices.mjs
+          node --check scripts/smoke-foreseerr-runtime.mjs
+
       # Format only this crate — path-dep Jellium is pinned and linted upstream.
       - name: Format
         run: cargo fmt -- --check

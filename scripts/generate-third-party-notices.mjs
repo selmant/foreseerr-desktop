@@ -1,74 +1,130 @@
 #!/usr/bin/env node
-// Produce a deterministic, redistributable inventory from the *deployed*
-// production tree. This intentionally reports metadata rather than attempting
-// to concatenate arbitrary upstream license text.
-import { lstat, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+// Produce a deterministic, redistributable inventory of what the bundled
+// Foreseerr runtime ships: the Rust crates linked into its binary (from
+// `cargo tree`) and the npm packages of Foreseerr's production dependency
+// tree, which the bundled frontend is built from. This intentionally reports
+// metadata rather than attempting to concatenate arbitrary upstream license
+// text.
+//
+// usage: generate-third-party-notices.mjs <foreseerr-checkout> <cargo-tree-output> <output>
+//
+// <cargo-tree-output> is
+//   cargo tree --locked -e normal --target <triple> --prefix none --format '{p}|{l}|{r}'
+// run in the checkout's backend-rs/.
+import { existsSync } from 'node:fs';
+import { readFile, realpath, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 
-const [bundleDirectory, nodeVersion, outputFile] = process.argv.slice(2);
-if (!bundleDirectory || !nodeVersion || !outputFile) {
-  throw new Error('usage: generate-third-party-notices.mjs <bundle> <node-version> <output>');
+const [checkout, cargoTreeFile, outputFile] = process.argv.slice(2);
+if (!checkout || !cargoTreeFile || !outputFile) {
+  throw new Error(
+    'usage: generate-third-party-notices.mjs <foreseerr-checkout> <cargo-tree-output> <output>',
+  );
 }
 
-const packageFiles = new Set();
-async function collect(directory) {
-  let entries;
+const manifest = JSON.parse(await readFile(join(checkout, 'package.json'), 'utf8'));
+
+function byNameAndVersion(a, b) {
+  return `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`);
+}
+
+function unique(packages) {
+  return packages
+    .sort(byNameAndVersion)
+    .filter(
+      (pkg, index, sorted) =>
+        index === 0 ||
+        `${pkg.name}@${pkg.version}` !== `${sorted[index - 1].name}@${sorted[index - 1].version}`,
+    );
+}
+
+function line(pkg) {
+  return `${pkg.name}@${pkg.version} — ${pkg.license}${pkg.repository ? ` — ${pkg.repository}` : ''}`;
+}
+
+// `name vX.Y.Z [(proc-macro)|(/path)]|license|repository[ (*)]`; the root
+// crate is Foreseerr itself.
+const crates = [];
+for (const entry of (await readFile(cargoTreeFile, 'utf8')).split('\n')) {
+  const [spec, license = '', repository = ''] = entry.replace(/ \(\*\)$/, '').split('|');
+  const match = /^(\S+) v(\S+)/.exec(spec ?? '');
+  if (!match || match[1] === 'foreseerr') continue;
+  crates.push({
+    name: match[1],
+    version: match[2],
+    license: license || 'UNSPECIFIED',
+    repository,
+  });
+}
+if (crates.length === 0) {
+  throw new Error(`no crates in ${cargoTreeFile}`);
+}
+
+// Node's resolution: the nearest node_modules/<name> from the dependent
+// package upwards to the checkout.
+function resolvePackage(name, fromDirectory) {
+  let directory = fromDirectory;
+  for (;;) {
+    const candidate = join(directory, 'node_modules', name, 'package.json');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(directory);
+    if (directory === checkout || parent === directory) return null;
+    directory = parent;
+  }
+}
+
+const npmPackages = [];
+const seen = new Set();
+const pending = Object.keys(manifest.dependencies ?? {}).map((name) => [name, checkout]);
+while (pending.length > 0) {
+  const [name, from] = pending.pop();
+  const packageFile = resolvePackage(name, from);
+  if (!packageFile) continue; // an optional dependency for another platform
+  const real = await realpath(packageFile);
+  if (seen.has(real)) continue;
+  seen.add(real);
+  let pkg;
   try {
-    entries = await readdir(directory, { withFileTypes: true });
+    pkg = JSON.parse(await readFile(real, 'utf8'));
   } catch {
-    return;
+    continue;
   }
-  for (const entry of entries) {
-    if (entry.name === '.bin' || entry.name === '.cache') continue;
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || directory.includes('node_modules')) {
-        await collect(path);
-      }
-    } else if (entry.name === 'package.json' && directory.includes('node_modules')) {
-      try {
-        packageFiles.add(await realpath(path));
-      } catch {
-        // A dangling optional-dependency symlink is not a shipped package.
-      }
-    }
-  }
-}
-
-await collect(join(bundleDirectory, 'node_modules'));
-const packages = [];
-for (const packageFile of packageFiles) {
-  try {
-    const pkg = JSON.parse(await readFile(packageFile, 'utf8'));
-    if (!pkg.name || !pkg.version) continue;
-    const repository = typeof pkg.repository === 'string'
-      ? pkg.repository
-      : pkg.repository?.url ?? '';
-    packages.push({
+  if (pkg.name && pkg.version) {
+    npmPackages.push({
       name: pkg.name,
       version: pkg.version,
-      license: pkg.license ?? 'UNSPECIFIED',
-      repository,
+      license:
+        (typeof pkg.license === 'string' ? pkg.license : pkg.license?.type) ?? 'UNSPECIFIED',
+      repository: typeof pkg.repository === 'string' ? pkg.repository : (pkg.repository?.url ?? ''),
     });
-  } catch {
-    // Ignore malformed optional package metadata; runtime execution does not
-    // depend on a notice generator parsing it.
+  }
+  for (const dependency of Object.keys({
+    ...pkg.dependencies,
+    ...pkg.optionalDependencies,
+  })) {
+    pending.push([dependency, dirname(real)]);
   }
 }
-packages.sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`));
-const unique = packages.filter((pkg, index) =>
-  index === 0 || `${pkg.name}@${pkg.version}` !== `${packages[index - 1].name}@${packages[index - 1].version}`,
-);
+if (npmPackages.length === 0) {
+  throw new Error(`no npm packages under ${checkout}/node_modules (run bun install)`);
+}
 
+const crateNotices = unique(crates);
+const npmNotices = unique(npmPackages);
 const lines = [
   'Foreseer Desktop third-party notices',
   '',
-  `Node.js ${nodeVersion} — MIT (full text: node/LICENSE)`,
-  'Foreseerr — MIT (full text: foreseerr/LICENSE when supplied by its package)',
+  `Foreseerr ${manifest.version} — ${manifest.license ?? 'MIT'} — https://github.com/selmant/foreseerr`,
+  '  (bundled runtime in foreseerr/)',
   '',
-  'Production npm dependencies:',
-  ...unique.map((pkg) => `${pkg.name}@${pkg.version} — ${pkg.license}${pkg.repository ? ` — ${pkg.repository}` : ''}`),
+  'Rust crates linked into the Foreseerr runtime:',
+  ...crateNotices.map(line),
+  '',
+  "npm packages of Foreseerr's production dependency tree (bundled web UI):",
+  ...npmNotices.map(line),
   '',
 ];
 await writeFile(outputFile, lines.join('\n'));
-console.log(`wrote ${unique.length} dependency notices to ${basename(outputFile)}`);
+console.log(
+  `wrote ${crateNotices.length} crate and ${npmNotices.length} npm notices to ${basename(outputFile)}`,
+);

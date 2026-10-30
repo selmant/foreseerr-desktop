@@ -302,8 +302,8 @@ impl HostExtension for ForeseerExtension {
             RuntimeEvent::ShutdownBeginning => {
                 self.runtime_shutting_down.store(true, Ordering::Release);
                 // Shut down on this thread. A detached helper can be killed
-                // when the process exits, leaving a spinning Node child that
-                // still holds instance.lock and the SQLite WAL.
+                // when the process exits, before the Foreseerr child has
+                // released instance.lock and checkpointed the SQLite WAL.
                 if let Some(supervisor) = &self.standalone_supervisor
                     && let Ok(mut supervisor) = supervisor.lock()
                 {
@@ -514,16 +514,17 @@ impl ForeseerExtension {
             return true;
         }
         if let Some(origin) = self.standalone_origin() {
-            return self.with_inner(|inner| {
-                inner.frontend_url = origin.clone();
-                inner.allow_insecure_http = true;
-                inner.controller.handle_command(NativeCommandV1::SetupSave {
-                    id,
-                    url: origin,
-                    allow_http: true,
+            return self
+                .with_inner(|inner| {
+                    inner.frontend_url = origin.clone();
+                    inner.allow_insecure_http = true;
+                    inner.controller.handle_command(NativeCommandV1::SetupSave {
+                        id,
+                        url: origin,
+                        allow_http: true,
+                    })
                 })
-            })
-            .unwrap_or(false);
+                .unwrap_or(false);
         }
         if let Err(message) = relaunch_application() {
             self.with_inner(|inner| {

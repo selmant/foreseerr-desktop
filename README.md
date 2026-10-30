@@ -15,7 +15,9 @@ See [LICENSE](LICENSE).
 
 Foreseer Desktop defaults to standalone mode: it starts a bundled Foreseerr
 server on an ephemeral `127.0.0.1` port and owns its local data. Remote mode
-remains available for an existing Foreseerr deployment.
+remains available for an existing Foreseerr deployment. The bundled server is
+Foreseerr's Rust backend (no Node.js runtime is shipped); see
+[Bundled Foreseerr runtime](#bundled-foreseerr-runtime).
 
 | Component | Owns |
 | --- | --- |
@@ -115,11 +117,56 @@ and the SQLite database (including WAL/SHM files). Caches and logs are never
 included in those backups, and only the three newest automatic backups are
 kept.
 
+The bundled runtime refuses to start on a database migrated by a newer
+Foreseerr (exit code 74) or while another desktop instance owns the data
+directory (exit code 73); the recovery screen names either case.
+
 If migration or startup fails, use the recovery screen’s **Open Logs** action,
 then stop the desktop before attempting manual recovery. Do not copy an older
 database over a database while a newer bundled binary is running: automatic
 restore is intentionally not implemented because schema downgrades are unsafe.
 Keep the failed database, logs, and backup together until recovery is complete.
+
+## Bundled Foreseerr runtime
+
+Standalone mode starts `resources/foreseerr/foreseerr` (`foreseerr.exe` on
+Windows) next to the executable: a Foreseerr runtime directory as Foreseerr's
+`scripts/build-runtime.sh` produces it (the binary, `seerr-api.yml`, the built
+frontend in `dist/public/`, `committag.json`). The child runs with that
+directory as working directory and `FORESEERR_APP_ROOT`, in Foreseerr's
+"Desktop child" mode (`FORESEERR_RUNTIME=desktop`, documented in Foreseerr's
+`backend-rs/README.md`): it prints one `FORESEERR_DESKTOP_READY` record on
+stdout, takes `shutdown` and `runtime-state` messages on stdin, and holds
+`state/instance.lock` while running. The supervisor accepts only the version
+in `foreseerr.version` and the revision in `foreseerr.rev`, and stops the
+child through its control channel so it can checkpoint SQLite and release
+the lock before exiting.
+
+Stage the pinned runtime with:
+
+```sh
+# Builds Foreseerr at foreseerr.rev (needs bun, `bun install
+# --frozen-lockfile` in the checkout, and its pinned Rust toolchain):
+FORESEERR_DIR=../SeerrSuggestArr ./scripts/stage-foreseerr.sh
+# Or reuse a runtime directory built from foreseerr.rev, such as an
+# extracted foreseerr-<platform> release archive:
+FORESEERR_DIR=../SeerrSuggestArr FORESEERR_RUNTIME_DIR=/path/to/runtime \
+  ./scripts/stage-foreseerr.sh
+# Debug builds look for resources/ next to target/debug/foreseer-desktop:
+ln -s ../../resources target/debug/resources
+```
+
+Both ways check that the checkout is clean, at `foreseerr.rev`, and at the
+`foreseerr.version` version, and write `resources/THIRD_PARTY_NOTICES.txt`
+from the runtime's crate and npm dependency trees. Release builds stage the
+runtime from source on each native runner (Linux x86_64, Windows x64).
+
+To check a staged runtime against the desktop child contract:
+
+```sh
+node scripts/smoke-foreseerr-runtime.mjs resources/foreseerr
+FORESEERR_RUNTIME_DIR=resources/foreseerr cargo test -- --ignored bundled_runtime
+```
 
 ## Test / lint
 
@@ -148,9 +195,13 @@ leaks, focus loss, and Jellyfin UI flashes.
 | --- | --- |
 | Version | `Cargo.toml` (`0.3.0`) |
 | Jellium revision | `jellium.rev` |
+| Foreseerr version | `foreseerr.version` (the bundled runtime's `package.json` version) |
+| Foreseerr revision | `foreseerr.rev` (the commit the bundled runtime is built from) |
 
 CI checks out that Jellium revision as a sibling of this repo and runs format,
-tests, and Clippy on Linux.
+tests, and Clippy on Linux. The release workflow also checks out Foreseerr at
+`foreseerr.rev` (`scripts/check-release-pins.sh`), stages its runtime, and
+smoke-tests it inside the packaged AppImage and the Windows bundle.
 
 ## Docs
 

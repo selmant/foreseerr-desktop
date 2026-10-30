@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Changed
+
+- Standalone mode runs Foreseerr's Rust backend. The bundle ships the
+  `foreseerr` binary with its built frontend in `resources/foreseerr/`
+  instead of a Node.js runtime, `launcher.js` and a production
+  `node_modules` tree; `node.rev` is gone. Bundled Foreseerr: 0.14.1.
+- Releases build the Foreseerr runtime from the pinned checkout with its
+  `scripts/build-runtime.sh` on each native runner, and smoke-test it inside
+  the packaged AppImage and the Windows bundle. Third-party notices list the
+  runtime's Rust crates and npm packages.
+
+### Fixed
+
+- Quitting stops the standalone server through its control channel and waits
+  for it, instead of signalling it right after the shutdown message, which
+  made it exit before checkpointing SQLite and left `instance.lock` behind.
+- Startup errors name a data directory owned by another instance and a
+  database migrated by a newer Foreseerr, and include the server's last log
+  lines without terminal colour codes.
+- The Windows build compiles again (`STILL_ACTIVE` import).
+- The release workflow checks Jellium out with full history for the boundary
+  audit, and no longer needs Node to stage on Windows.
+
 ## 0.3.0 — 2026-08-29
 
 ### Added

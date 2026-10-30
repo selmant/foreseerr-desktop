@@ -44,11 +44,6 @@ jobs:
           path: SeerrSuggestArr
           submodules: recursive
 
-      - name: Install pinned Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: foreseer-desktop/node.rev
-
       - name: Validate release pins
         working-directory: foreseer-desktop
         shell: bash
@@ -70,6 +65,9 @@ jobs:
           repository: selmant/jellium-desktop
           ref: ${{ steps.jellium.outputs.revision }}
           path: jellium-desktop
+          # The boundary audit verifies ancestry from jellium.upstream-base,
+          # so the pinned thin fork must not be checked out shallowly.
+          fetch-depth: 0
           submodules: recursive
 
       - name: Audit pinned runtime boundary and protocol contracts
@@ -87,11 +85,36 @@ jobs:
             const b = JSON.parse(fs.readFileSync("protocol/protocol-v1.json"));
             if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error("Foreseerr protocol fixture differs from desktop fixture");
           '
-          grep -q 'FORESEERR_DESKTOP_READY' "$FORESEERR_DIR/server/index.ts"
-          grep -q 'protocolVersion: 1' "$FORESEERR_DIR/server/index.ts"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      # The bundled runtime is Foreseerr's Rust backend plus its built
+      # frontend (Foreseerr's scripts/build-runtime.sh), built here on the
+      # host from the pinned checkout. Inside the AppImage it runs on the
+      # bundled glibc like the desktop binary, so the host glibc is fine.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: SeerrSuggestArr/.bun-version
+
+      - name: Install Foreseerr dependencies
+        working-directory: SeerrSuggestArr
+        run: bun install --frozen-lockfile
+
+      - name: Install Foreseerr's pinned Rust toolchain
+        working-directory: SeerrSuggestArr/backend-rs
+        run: rustup toolchain install
+
+      - name: Stage bundled Foreseerr runtime
+        working-directory: foreseer-desktop
+        shell: bash
+        env:
+          FORESEERR_DIR: ${{ github.workspace }}/SeerrSuggestArr
+        run: |
+          set -euo pipefail
+          ./scripts/stage-foreseerr.sh resources
+          node scripts/smoke-foreseerr-runtime.mjs resources/foreseerr
 
       - name: Cache CEF
         uses: actions/cache@v4
@@ -145,9 +168,12 @@ jobs:
               next
             }
             $0 == "# Desktop integration" {
-              print "# Bundled Foreseerr + Node runtime (resolved relative to the executable)."
+              print "# Bundled Foreseerr runtime (resolved relative to the executable)."
               print "mkdir -p \"$APPDIR/usr/bin/resources\""
               print "cp -a /workspace/foreseer-desktop/resources/. \"$APPDIR/usr/bin/resources/\""
+              print "# The runtime child inherits the bundled glibc on the AppRun library"
+              print "# path, so it needs the bundled loader too, like the desktop binary."
+              print "patchelf --set-interpreter \"/tmp/.jf-cef-interp/${LD_SONAME}\" \"$APPDIR/usr/bin/resources/foreseerr/foreseerr\""
               print
             }
             {
@@ -191,6 +217,7 @@ jobs:
             "${resources}/com.selmantrabzon.Foreseer.metainfo.xml"
 
           grep -q 'cargo build --release' "${script}"
+          grep -q 'resources/foreseerr/foreseerr' "${script}"
           grep -q 'foreseer-desktop' "${app_run}"
 
       - name: Build AppImage container
@@ -210,43 +237,43 @@ jobs:
           mkdir -p .build/appimage dist
 
           docker run --rm \
-            --env FORESEERR_DIR=/workspace/SeerrSuggestArr \
-            --env FORESEERR_NODE_BIN=/opt/foreseer-node/bin/node \
             --env VERSION="${VERSION}" \
             --volume "${GITHUB_WORKSPACE}:/workspace" \
             --volume "${GITHUB_WORKSPACE}/.build/appimage:/build" \
             --volume "${GITHUB_WORKSPACE}/dist:/host-output" \
             foreseer-desktop-appimage:ci \
-            sh -ec '
-              set -eu
-              node_version="$(tr -d "[:space:]" < /workspace/foreseer-desktop/node.rev)"
-              architecture="$(uname -m)"
-              case "$architecture" in
-                x86_64) node_arch=x64 ;;
-                aarch64) node_arch=arm64 ;;
-                *) echo "unsupported Node architecture: $architecture" >&2; exit 1 ;;
-              esac
-              wget -q -O /tmp/node.tar.xz "https://nodejs.org/dist/$node_version/node-$node_version-linux-$node_arch.tar.xz"
-              mkdir -p /opt/foreseer-node
-              tar -xJf /tmp/node.tar.xz --strip-components=1 -C /opt/foreseer-node
-              corepack enable
-              corepack prepare pnpm@10.24.0 --activate
-              /workspace/foreseer-desktop/scripts/stage-foreseerr.sh /workspace/foreseer-desktop/resources
-              /workspace/jellium-desktop/dev/linux/appimage/container-build.sh
-            '
+            /workspace/jellium-desktop/dev/linux/appimage/container-build.sh
 
           sudo chown -R "$(id -u):$(id -g)" dist .build jellium-desktop/.cache || true
           test -f "dist/ForeseerDesktop-${VERSION}-x86_64.AppImage"
           chmod +x "dist/ForeseerDesktop-${VERSION}-x86_64.AppImage"
 
+      # Start the runtime from the packaged AppImage the way the desktop
+      # does there: AppRun's library path and loader symlink, the desktop
+      # child environment, readiness, status, frontend and a graceful stop.
       - name: Verify Linux runtime payload
         shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          test -f foreseer-desktop/resources/foreseerr/launcher.js
-          test -x foreseer-desktop/resources/node/node
-          test -f foreseer-desktop/resources/THIRD_PARTY_NOTICES.txt
-          strings "dist/ForeseerDesktop-${{ steps.version.outputs.version }}-x86_64.AppImage" | grep -q 'foreseerr/launcher.js'
+          check="${GITHUB_WORKSPACE}/.build/appimage-check"
+          rm -rf "${check}"
+          mkdir -p "${check}"
+          (cd "${check}" && "${GITHUB_WORKSPACE}/dist/ForeseerDesktop-${VERSION}-x86_64.AppImage" --appimage-extract >/dev/null)
+          appdir="${check}/squashfs-root"
+          resources="${appdir}/usr/bin/resources"
+          test -x "${resources}/foreseerr/foreseerr"
+          test -f "${resources}/foreseerr/seerr-api.yml"
+          test -f "${resources}/foreseerr/dist/public/index.html"
+          test -f "${resources}/foreseerr/committag.json"
+          test -f "${resources}/THIRD_PARTY_NOTICES.txt"
+          test ! -e "${resources}/node"
+          readelf -l "${resources}/foreseerr/foreseerr" | grep -q '/tmp/.jf-cef-interp/ld-linux-x86-64.so.2'
+          mkdir -p /tmp/.jf-cef-interp
+          ln -sf "${appdir}/usr/lib/ld-linux-x86-64.so.2" /tmp/.jf-cef-interp/ld-linux-x86-64.so.2
+          node foreseer-desktop/scripts/smoke-foreseerr-runtime.mjs "${resources}/foreseerr" \
+            "LD_LIBRARY_PATH=${appdir}/usr/lib:${appdir}/usr/bin"
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -282,24 +309,32 @@ jobs:
           path: SeerrSuggestArr
           submodules: recursive
 
-      - name: Install pinned Node
-        uses: actions/setup-node@v4
+      # The bundled runtime is Foreseerr's Rust backend (foreseerr.exe)
+      # plus its built frontend, built natively here from the pinned
+      # checkout with Foreseerr's scripts/build-runtime.sh.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version-file: foreseer-desktop/node.rev
+          bun-version-file: SeerrSuggestArr/.bun-version
+
+      - name: Install Foreseerr dependencies
+        working-directory: SeerrSuggestArr
+        run: bun install --frozen-lockfile
+
+      - name: Install Foreseerr's pinned Rust toolchain
+        working-directory: SeerrSuggestArr/backend-rs
+        run: rustup toolchain install
 
       - name: Stage bundled Foreseerr runtime
-        shell: pwsh
-        env:
-          FORESEERR_DIR: ${{ github.workspace }}\SeerrSuggestArr
+        shell: bash
         run: |
-          corepack enable
-          corepack prepare pnpm@10.24.0 --activate
-          $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
-          if (-not (Test-Path $bash)) { throw "Git Bash is required to stage the runtime" }
-          & $bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")"; export FORESEERR_DIR="$(cygpath -u "$FORESEERR_DIR")"; ./foreseer-desktop/scripts/stage-foreseerr.sh ./bundle/resources'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Test-Path bundle/resources/foreseerr/launcher.js)) { throw "Foreseerr runtime was not staged" }
-          if (-not (Test-Path bundle/resources/node/node.exe)) { throw "Node runtime was not staged" }
+          set -euo pipefail
+          workspace="$(cygpath -u "$GITHUB_WORKSPACE")"
+          FORESEERR_DIR="${workspace}/SeerrSuggestArr" \
+            ./foreseer-desktop/scripts/stage-foreseerr.sh "${workspace}/bundle/resources"
+          test -x bundle/resources/foreseerr/foreseerr.exe
+          test -f bundle/resources/foreseerr/seerr-api.yml
+          test -f bundle/resources/foreseerr/dist/public/index.html
 
       - name: Read pinned Jellium revision
         id: jellium
@@ -317,6 +352,9 @@ jobs:
           repository: selmant/jellium-desktop
           ref: ${{ steps.jellium.outputs.revision }}
           path: jellium-desktop
+          # The boundary audit verifies ancestry from jellium.upstream-base,
+          # so the pinned thin fork must not be checked out shallowly.
+          fetch-depth: 0
           submodules: recursive
 
       - name: Audit pinned runtime boundary and protocol contracts
@@ -324,7 +362,7 @@ jobs:
         run: |
           $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
           if (-not (Test-Path $bash)) { throw "Git Bash is required for the boundary audit" }
-          & $bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")/foreseer-desktop"; export JELLIUM_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/jellium-desktop"; export FORESEERR_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/SeerrSuggestArr"; ./scripts/boundary-audit.sh; node -e '\''const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.FORESEERR_DIR + "/protocol/protocol-v1.json")); const b=JSON.parse(fs.readFileSync("protocol/protocol-v1.json")); if(JSON.stringify(a)!==JSON.stringify(b)) throw new Error("Foreseerr protocol fixture differs from desktop fixture");'\''; grep -q FORESEERR_DESKTOP_READY "$FORESEERR_DIR/server/index.ts"; grep -q "protocolVersion: 1" "$FORESEERR_DIR/server/index.ts"'
+          & $bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")/foreseer-desktop"; export JELLIUM_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/jellium-desktop"; ./scripts/boundary-audit.sh; node -e '\''const fs=require("fs"); const a=JSON.parse(fs.readFileSync("../SeerrSuggestArr/protocol/protocol-v1.json")); const b=JSON.parse(fs.readFileSync("protocol/protocol-v1.json")); if(JSON.stringify(a)!==JSON.stringify(b)) throw new Error("Foreseerr protocol fixture differs from desktop fixture");'\'''
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Install Rust
@@ -411,6 +449,12 @@ jobs:
           copy /Y "%GITHUB_WORKSPACE%\foreseer-target\release\foreseer-desktop.exe" "%GITHUB_WORKSPACE%\bundle\foreseer-desktop.exe" || exit /b 1
           del /Q "%GITHUB_WORKSPACE%\bundle\jellium-desktop.exe"
 
+      - name: Smoke-test the bundled Foreseerr runtime
+        shell: pwsh
+        run: |
+          node foreseer-desktop/scripts/smoke-foreseerr-runtime.mjs bundle/resources/foreseerr
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Create Windows ZIP
         shell: pwsh
         env:
@@ -421,6 +465,9 @@ jobs:
 
           if (-not (Test-Path bundle/foreseer-desktop.exe)) {
             throw "foreseer-desktop.exe was not staged"
+          }
+          if (-not (Test-Path bundle/resources/foreseerr/foreseerr.exe)) {
+            throw "foreseerr.exe was not staged"
           }
           if (-not (Test-Path bundle/resources/THIRD_PARTY_NOTICES.txt)) {
             throw "bundled runtime notices were not staged"

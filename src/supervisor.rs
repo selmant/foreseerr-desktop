@@ -1093,6 +1093,26 @@ mod tests {
         assert!(message.starts_with("Bundled Foreseerr exited before readiness"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn terminate_kills_a_group_that_ignores_sigterm() {
+        let mut command = Command::new("sh");
+        command
+            .args(["-c", r#"trap "" TERM; sleep 30 & wait"#])
+            .stdin(Stdio::piped())
+            .process_group(0);
+        let mut child = ManagedChild::spawn(command).unwrap();
+        // Let the shell install its trap before it is signalled.
+        std::thread::sleep(Duration::from_millis(100));
+        let started = Instant::now();
+        child.terminate(Duration::from_millis(200));
+        assert!(child.has_exited());
+        assert!(started.elapsed() < Duration::from_secs(5));
+        // Nothing is signalled once the child has exited.
+        child.shutdown();
+        child.terminate(Duration::from_millis(200));
+    }
+
     #[test]
     fn diagnostics_are_plain_redacted_and_bounded() {
         let mut diagnostics = Vec::new();

@@ -115,6 +115,8 @@ jobs:
           set -euo pipefail
           ./scripts/stage-foreseerr.sh resources
           node scripts/smoke-foreseerr-runtime.mjs resources/foreseerr
+          # Leave the disk to the CEF/mpv/AppImage builds.
+          rm -rf "${FORESEERR_DIR}/backend-rs/target"
 
       - name: Cache CEF
         uses: actions/cache@v4
@@ -358,12 +360,17 @@ jobs:
           submodules: recursive
 
       - name: Audit pinned runtime boundary and protocol contracts
-        shell: pwsh
+        shell: bash
+        working-directory: foreseer-desktop
         run: |
-          $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
-          if (-not (Test-Path $bash)) { throw "Git Bash is required for the boundary audit" }
-          & $bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")/foreseer-desktop"; export JELLIUM_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/jellium-desktop"; ./scripts/boundary-audit.sh; node -e '\''const fs=require("fs"); const a=JSON.parse(fs.readFileSync("../SeerrSuggestArr/protocol/protocol-v1.json")); const b=JSON.parse(fs.readFileSync("protocol/protocol-v1.json")); if(JSON.stringify(a)!==JSON.stringify(b)) throw new Error("Foreseerr protocol fixture differs from desktop fixture");'\'''
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          set -euo pipefail
+          JELLIUM_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/jellium-desktop" ./scripts/boundary-audit.sh
+          node -e '
+            const fs = require("fs");
+            const a = JSON.parse(fs.readFileSync("../SeerrSuggestArr/protocol/protocol-v1.json"));
+            const b = JSON.parse(fs.readFileSync("protocol/protocol-v1.json"));
+            if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error("Foreseerr protocol fixture differs from desktop fixture");
+          '
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

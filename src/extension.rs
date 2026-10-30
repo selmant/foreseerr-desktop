@@ -514,16 +514,17 @@ impl ForeseerExtension {
             return true;
         }
         if let Some(origin) = self.standalone_origin() {
-            return self.with_inner(|inner| {
-                inner.frontend_url = origin.clone();
-                inner.allow_insecure_http = true;
-                inner.controller.handle_command(NativeCommandV1::SetupSave {
-                    id,
-                    url: origin,
-                    allow_http: true,
+            return self
+                .with_inner(|inner| {
+                    inner.frontend_url = origin.clone();
+                    inner.allow_insecure_http = true;
+                    inner.controller.handle_command(NativeCommandV1::SetupSave {
+                        id,
+                        url: origin,
+                        allow_http: true,
+                    })
                 })
-            })
-            .unwrap_or(false);
+                .unwrap_or(false);
         }
         if let Err(message) = relaunch_application() {
             self.with_inner(|inner| {

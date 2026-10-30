@@ -69,9 +69,8 @@ fn main() {
         standalone = Some(Arc::new(Mutex::new(child)));
         (descriptor, url, true)
     } else {
-        let url =
-            validate_foreseer_url(&config.remote.server_url)
-                .expect("validated configured Foreseer URL");
+        let url = validate_foreseer_url(&config.remote.server_url)
+            .expect("validated configured Foreseer URL");
         let descriptor = HostExtensionDescriptor::from_url(
             &url,
             vec![frontend_script],

@@ -37,8 +37,7 @@ impl SessionBootstrap {
         validate_bootstrap_server_url(&self.server_url)
             .map_err(|_| "invalid_bootstrap_response")?;
         if let Some(fallback) = &self.fallback_server_url {
-            validate_bootstrap_server_url(fallback)
-                .map_err(|_| "invalid_bootstrap_response")?;
+            validate_bootstrap_server_url(fallback).map_err(|_| "invalid_bootstrap_response")?;
         }
         self.validate_ids()
     }

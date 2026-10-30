@@ -16,7 +16,7 @@ use std::os::unix::process::CommandExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, STILL_ACTIVE};
 #[cfg(windows)]
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
@@ -25,7 +25,7 @@ use windows_sys::Win32::System::JobObjects::{
 };
 #[cfg(windows)]
 use windows_sys::Win32::System::Threading::{
-    GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, STILL_ACTIVE,
+    GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
 use crate::config::AppConfig;
@@ -390,9 +390,7 @@ impl StandaloneSupervisor {
                     // stderr, and livelocks the event loop so /login never
                     // renders.
                     drop(tx);
-                    std::thread::spawn(move || {
-                        while rx.recv().is_ok() {}
-                    });
+                    std::thread::spawn(move || while rx.recv().is_ok() {});
                     return Ok(supervisor);
                 }
             }
@@ -636,7 +634,8 @@ fn process_is_alive(pid: u32) -> bool {
     let mut exit_code = 0;
     let queried = unsafe { GetExitCodeProcess(handle, &mut exit_code) } != 0;
     unsafe { CloseHandle(handle) };
-    queried && exit_code == STILL_ACTIVE
+    // `STILL_ACTIVE` is an NTSTATUS (i32); the exit code is a DWORD.
+    queried && exit_code == STILL_ACTIVE as u32
 }
 
 #[cfg(all(not(unix), not(windows)))]
